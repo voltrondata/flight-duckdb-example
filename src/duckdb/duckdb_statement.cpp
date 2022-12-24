@@ -25,8 +25,10 @@
 #include <arrow/flight/sql/column_metadata.h>
 #include <arrow/c/bridge.h>
 #include "duckdb_server.h"
+#include <arrow_converter.hpp>
 
 using duckdb::QueryResult;
+using duckdb::ArrowConverter;
 
 namespace arrow {
 namespace flight {
@@ -93,7 +95,7 @@ std::shared_ptr<DataType> GetDataTypeFromDuckDbType(
     case duckdb::LogicalTypeId::TIME_TZ:
     case duckdb::LogicalTypeId::HUGEINT:
     case duckdb::LogicalTypeId::POINTER:
-    case duckdb::LogicalTypeId::HASH:
+//    case duckdb::LogicalTypeId::HASH:
     case duckdb::LogicalTypeId::VALIDITY:
     case duckdb::LogicalTypeId::UUID:
     case duckdb::LogicalTypeId::STRUCT:
@@ -122,9 +124,13 @@ arrow::Result<int> DuckDBStatement::Execute() {
 
   ArrowArray res_arr;
   ArrowSchema res_schema;
-  
-  QueryResult::ToArrowSchema(&res_schema, res->types, res->names);
-  res->Fetch()->ToArrowArray(&res_arr);
+  auto timezone_config = duckdb::QueryResult::GetConfigTimezone(*res);
+	duckdb::ArrowConverter::ToArrowSchema(&res_schema, res->types, res->names, timezone_config);
+ 	auto chunk = res->Fetch();
+		if (!chunk || chunk->size() == 0) {
+			return 0;
+		}
+	ArrowConverter::ToArrowArray(*chunk, &res_arr);
   ARROW_ASSIGN_OR_RAISE(result_, arrow::ImportRecordBatch(&res_arr, &res_schema));
   schema_ = result_->schema();
 
